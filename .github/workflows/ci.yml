@@ -19,6 +19,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Debug: show workspace and files
+        run: |
+          echo "PWD: $(pwd)"
+          echo "-- ls -la --"
+          ls -la
+          echo "-- find (maxdepth 2) --"
+          find . -maxdepth 2 -type f -print || true
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
@@ -32,7 +39,11 @@ jobs:
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
           restore-keys: ${{ runner.os }}-go-
       - name: Install dependencies
-        run: go mod tidy
+        run: |
+          echo 'GOMOD before:'; go env GOMOD || true
+          echo 'pwd:'; pwd
+          echo 'ls:'; ls -la
+          go mod tidy
       - name: Run tests
         run: go test ./...
 
