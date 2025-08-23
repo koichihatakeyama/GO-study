@@ -60,14 +60,76 @@ jobs:
             echo "Attempt $i: building docker image"
             if docker build -t go-study:ci .; then
               break
-            fi
-            sleep $((i * 5))
-          done
-      - name: Save Docker image to tar
-        run: docker save go-study:ci -o go-study-ci-image.tar
-      - name: Upload Docker image artifact
-        uses: actions/upload-artifact@v3
-        with:
-          name: docker-image
-          path: go-study-ci-image.tar
+            name: CI
+
+            on:
+              push:
+                branches: [ main ]
+              pull_request:
+                branches: [ main ]
+              workflow_dispatch: {}
+
+            concurrency:
+              group: ${{ github.workflow }}-${{ github.ref }}
+              cancel-in-progress: false
+
+            permissions:
+              contents: read
+
+            jobs:
+              test:
+                runs-on: ubuntu-latest
+                steps:
+                  - uses: actions/checkout@v4
+                  - name: Debug: show workspace and files
+                    run: |
+                      echo "PWD: $(pwd)"
+                      echo "-- ls -la --"
+                      ls -la
+                      echo "-- find (maxdepth 2) --"
+                      find . -maxdepth 2 -type f -print || true
+                  - name: Set up Go
+                    uses: actions/setup-go@v4
+                    with:
+                      go-version: '1.20'
+                  - name: Cache Go modules
+                    uses: actions/cache@v4
+                    with:
+                      path: |
+                        ~/.cache/go-build
+                        ~/go/pkg/mod
+                      key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+                      restore-keys: ${{ runner.os }}-go-
+                  - name: Install dependencies
+                    run: |
+                      echo 'GOMOD before:'; go env GOMOD || true
+                      echo 'pwd:'; pwd
+                      echo 'ls:'; ls -la
+                      go mod tidy
+                  - name: Run tests
+                    run: go test ./...
+
+              build-image:
+                name: Build Docker image and upload
+                needs: test
+                runs-on: ubuntu-latest
+                if: success()
+                steps:
+                  - uses: actions/checkout@v4
+                  - name: Build Docker image (retry up to 3 times)
+                    run: |
+                      for i in 1 2 3; do
+                        echo "Attempt $i: building docker image"
+                        if docker build -t go-study:ci .; then
+                          break
+                        fi
+                        sleep $((i * 5))
+                      done
+                  - name: Save Docker image to tar
+                    run: docker save go-study:ci -o go-study-ci-image.tar
+                  - name: Upload Docker image artifact
+                    uses: actions/upload-artifact@v3
+                    with:
+                      name: docker-image
+                      path: go-study-ci-image.tar
 
